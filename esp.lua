@@ -18,7 +18,7 @@ Frame.Position = UDim2.new(0, 20, 0, 20)
 Frame.BackgroundColor3 = Color3.fromRGB(40, 44, 52)
 Frame.BorderSizePixel = 0
 Frame.Parent = ScreenGui
--- Скругление углов
+
 local UIStroke = Instance.new("UICorner")
 UIStroke.CornerRadius = UDim.new(0, 12)
 UIStroke.Parent = Frame
@@ -30,7 +30,6 @@ UIGradient.Color = ColorSequence.new{
 }
 UIGradient.Parent = Frame
 
--- Заголовок
 local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, 0, 0, 30)
 Title.BackgroundTransparency = 1
@@ -40,7 +39,6 @@ Title.TextSize = 20
 Title.TextColor3 = Color3.fromRGB(255, 255, 255)
 Title.Parent = Frame
 
--- Кнопка переключения
 local ToggleButton = Instance.new("TextButton")
 ToggleButton.Size = UDim2.new(0, 120, 0, 35)
 ToggleButton.Position = UDim2.new(0, 20, 0, 50)
@@ -54,7 +52,6 @@ buttonCorner.CornerRadius = UDim.new(0, 8)
 buttonCorner.Parent = ToggleButton
 ToggleButton.Parent = Frame
 
--- Статистика жертв
 local KillCountLabel = Instance.new("TextLabel")
 KillCountLabel.Size = UDim2.new(1, -40, 0, 70)
 KillCountLabel.Position = UDim2.new(0, 20, 0, 95)
@@ -68,7 +65,6 @@ KillCountLabel.TextSize = 14
 KillCountLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 KillCountLabel.Parent = Frame
 
--- Прогрессбар
 local ProgressBackground = Instance.new("Frame")
 ProgressBackground.Size = UDim2.new(1, -40, 0, 10)
 ProgressBackground.Position = UDim2.new(0, 20, 0, 165)
@@ -87,10 +83,10 @@ local progressInnerCorner = Instance.new("UICorner")
 progressInnerCorner.CornerRadius = UDim.new(0, 5)
 ProgressBar.Parent = ProgressBackground
 
--- Переменная для хранения случайного NPC, к которому телепортируемся
+-- Переменная для текущего NPC
 local currentTargetNPC = nil
 
--- Функция выбора случайного NPC
+-- Функция получения случайного NPC
 local function getRandomNPC()
     local npcs = {}
     for _, v in pairs(workspace:GetDescendants()) do
@@ -104,33 +100,46 @@ local function getRandomNPC()
     return npcs[math.random(1, #npcs)]
 end
 
--- Функция телепортации игрока к NPC
+-- Функция телепортации к NPC
 local function teleportToNPC(npc)
     if not npc or not npc:FindFirstChild("HumanoidRootPart") then return end
     local hrp = npc.HumanoidRootPart
-    local offset = Vector3.new(0, 0, -10) -- чуть дальше от NPC
+    local offset = Vector3.new(0, 0, -10) -- чуть дальше
     local newPosition = hrp.CFrame * CFrame.new(offset)
     if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
         LocalPlayer.Character.HumanoidRootPart.CFrame = newPosition
     end
 end
 
--- Функция для выбора нового NPC и телепортации к нему
-local function teleportToRandomNPC()
+-- Функция телепортации к случайному NPC и убийства
+local function teleportAndKill()
     local npc = getRandomNPC()
     if npc then
         currentTargetNPC = npc
         teleportToNPC(npc)
+        killAllHumanoids()
     end
 end
 
--- Функции переключения
+-- Функция для убийства всех NPC
+local function killAllHumanoids()
+    local npcs = findHumanoids()
+    for _, npc in pairs(npcs) do
+        local humanoid = npc:FindFirstChildOfClass("Humanoid")
+        if humanoid and humanoid.Health > 0 then
+            highlightNPC(npc)
+            humanoid.Health = 0
+        end
+    end
+end
+
+-- Переключатель
 local function toggleKilling()
     isKilling = not isKilling
     if isKilling then
         ToggleButton.Text = "Стоп"
         ToggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-        teleportToRandomNPC() -- при начале убийства сразу телепорт
+        teleportAndKill() -- при старте убийства сразу телепорт и убийство
     else
         ToggleButton.Text = "Начать убийство"
         ToggleButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
@@ -139,7 +148,7 @@ end
 
 ToggleButton.MouseButton1Click:Connect(toggleKilling)
 
--- Функция поиска NPC
+-- Поиск NPC
 local function findHumanoids()
     local npcs = {}
     for _, v in pairs(workspace:GetDescendants()) do
@@ -215,20 +224,8 @@ runService.Heartbeat:Connect(function()
         local progress = math.min(elapsed / killInterval, 1)
         ProgressBar.Size = UDim2.new(progress, 0, 1, 0)
         if elapsed >= killInterval then
-            -- Телепортировать к следующему NPC
-            teleportToRandomNPC()
-
-            -- Убить NPC
-            local npcs = findHumanoids()
-            for _, npc in pairs(npcs) do
-                local humanoid = npc:FindFirstChildOfClass("Humanoid")
-                if humanoid and humanoid.Health > 0 then
-                    -- Подсветка
-                    highlightNPC(npc)
-                    -- Убийство
-                    humanoid.Health = 0
-                end
-            end
+            -- Телепортируемся и убиваем
+            teleportAndKill()
             lastKillTime = currentTime
             updateKillCount()
         end
