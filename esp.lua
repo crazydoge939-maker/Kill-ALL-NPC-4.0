@@ -5,6 +5,7 @@ local lastKillTime = 0
 local runService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 
 -- Создаем GUI
 local ScreenGui = Instance.new("ScreenGui")
@@ -18,11 +19,9 @@ Frame.Position = UDim2.new(0, 20, 0, 20)
 Frame.BackgroundColor3 = Color3.fromRGB(40, 44, 52)
 Frame.BorderSizePixel = 0
 Frame.Parent = ScreenGui
-
 local UIStroke = Instance.new("UICorner")
 UIStroke.CornerRadius = UDim.new(0, 12)
 UIStroke.Parent = Frame
-
 local UIGradient = Instance.new("UIGradient")
 UIGradient.Color = ColorSequence.new{
     ColorSequenceKeypoint.new(0, Color3.fromRGB(50, 54, 62)),
@@ -83,72 +82,7 @@ local progressInnerCorner = Instance.new("UICorner")
 progressInnerCorner.CornerRadius = UDim.new(0, 5)
 ProgressBar.Parent = ProgressBackground
 
--- Переменная для текущего NPC
-local currentTargetNPC = nil
-
--- Функция получения случайного NPC
-local function getRandomNPC()
-    local npcs = {}
-    for _, v in pairs(workspace:GetDescendants()) do
-        if v:IsA("Humanoid") and v.Parent and v.Parent:FindFirstChildOfClass("Humanoid") then
-            if not game.Players:GetPlayerFromCharacter(v.Parent) then
-                table.insert(npcs, v.Parent)
-            end
-        end
-    end
-    if #npcs == 0 then return nil end
-    return npcs[math.random(1, #npcs)]
-end
-
--- Функция телепортации к NPC
-local function teleportToNPC(npc)
-    if not npc or not npc:FindFirstChild("HumanoidRootPart") then return end
-    local hrp = npc.HumanoidRootPart
-    local offset = Vector3.new(0, 0, -10) -- чуть дальше
-    local newPosition = hrp.CFrame * CFrame.new(offset)
-    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        LocalPlayer.Character.HumanoidRootPart.CFrame = newPosition
-    end
-end
-
--- Функция телепортации к случайному NPC и убийства
-local function teleportAndKill()
-    local npc = getRandomNPC()
-    if npc then
-        currentTargetNPC = npc
-        teleportToNPC(npc)
-        killAllHumanoids()
-    end
-end
-
--- Функция для убийства всех NPC
-local function killAllHumanoids()
-    local npcs = findHumanoids()
-    for _, npc in pairs(npcs) do
-        local humanoid = npc:FindFirstChildOfClass("Humanoid")
-        if humanoid and humanoid.Health > 0 then
-            highlightNPC(npc)
-            humanoid.Health = 0
-        end
-    end
-end
-
--- Переключатель
-local function toggleKilling()
-    isKilling = not isKilling
-    if isKilling then
-        ToggleButton.Text = "Стоп"
-        ToggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-        teleportAndKill() -- при старте убийства сразу телепорт и убийство
-    else
-        ToggleButton.Text = "Начать убийство"
-        ToggleButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
-    end
-end
-
-ToggleButton.MouseButton1Click:Connect(toggleKilling)
-
--- Поиск NPC
+-- Переменная для хранения выбранного NPC
 local function findHumanoids()
     local npcs = {}
     for _, v in pairs(workspace:GetDescendants()) do
@@ -161,7 +95,6 @@ local function findHumanoids()
     return npcs
 end
 
--- Подсветка NPC
 local function highlightNPC(npc)
     if not npc then return end
     local highlight = npc:FindFirstChild("Highlight")
@@ -208,7 +141,6 @@ local function updateKillCount()
     KillCountLabel.Text = displayText
 end
 
--- Обновление GUI каждые 0.5 сек
 coroutine.wrap(function()
     while true do
         wait(0.5)
@@ -216,7 +148,28 @@ coroutine.wrap(function()
     end
 end)()
 
--- Основной цикл убийства
+local function teleportPlayerNearNPC(npc)
+    local hrp = Character:FindFirstChild("HumanoidRootPart")
+    if hrp and npc then
+        local npcHRP = npc:FindFirstChild("HumanoidRootPart")
+        if npcHRP then
+            -- Телепортируем чуть дальше от NPC
+            local direction = (hrp.Position - npcHRP.Position).unit
+            local newPos = npcHRP.Position + direction * 5 -- чуть дальше
+            hrp.CFrame = CFrame.new(newPos + Vector3.new(0, 3, 0))
+        end
+    end
+end
+
+local function killNPC(npc)
+    local humanoid = npc:FindFirstChildOfClass("Humanoid")
+    if humanoid and humanoid.Health > 0 then
+        highlightNPC(npc)
+        humanoid.Health = 0
+    end
+end
+
+-- Основной цикл
 runService.Heartbeat:Connect(function()
     if isKilling then
         local currentTime = tick()
@@ -224,8 +177,15 @@ runService.Heartbeat:Connect(function()
         local progress = math.min(elapsed / killInterval, 1)
         ProgressBar.Size = UDim2.new(progress, 0, 1, 0)
         if elapsed >= killInterval then
-            -- Телепортируемся и убиваем
-            teleportAndKill()
+            -- выбираем рандомного NPC
+            local npcs = findHumanoids()
+            if #npcs > 0 then
+                local npc = npcs[math.random(1, #npcs)]
+                -- телепортируем игрока к NPC
+                teleportPlayerNearNPC(npc)
+                -- убиваем NPC
+                killNPC(npc)
+            end
             lastKillTime = currentTime
             updateKillCount()
         end
@@ -246,13 +206,11 @@ Frame.InputBegan:Connect(function(input)
         startPos = Frame.Position
     end
 end)
-
 Frame.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
         dragging = false
     end
 end)
-
 Frame.InputChanged:Connect(function(input)
     if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
         local delta = input.Position - dragStart
